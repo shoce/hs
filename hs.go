@@ -10,8 +10,8 @@ still not working with root sessions:
 Oct 28 21:37:28 ci sshd[3685911]: error: session_signal_req: session signalling requires privilege separation
 020/357 UserKeyFile support
 021/0502 InReaderBufferSize
-021/1117 Silent
-023/0827 Verbose
+021/1117 SILENT
+023/0827 VERBOSE
 023/0827 keepalive
 
 go mod init github.com/shoce/hs
@@ -85,8 +85,8 @@ var (
 	LogBeatTime bool
 	LogUTCTime  bool
 
-	Verbose bool
-	Silent  bool
+	VERBOSE bool
+	SILENT  bool
 
 	Proxy       string // proxy chain separated by semicolons
 	ProxyChain  = []string{}
@@ -186,33 +186,33 @@ func init() {
 		os.Exit(0)
 	}
 
-	if os.Getenv("Verbose") != "" {
-		Verbose = true
+	if os.Getenv("VERBOSE") != "" {
+		VERBOSE = true
 	}
 
-	if os.Getenv("Silent") != "" {
-		Silent = true
+	if os.Getenv("SILENT") != "" {
+		SILENT = true
 	}
 
 	var err error
 
 	Proxy = os.Getenv("Proxy")
-	if Verbose {
+	if VERBOSE {
 		log("Proxy:%s", Proxy)
 	}
 	ProxyChain = strings.FieldsFunc(Proxy, func(c rune) bool { return c == ';' })
-	if Verbose {
+	if VERBOSE {
 		log("ProxyChain:(%d)%v", len(ProxyChain), ProxyChain)
 	}
 	ProxyDialer = proxy.Direct
 
 	Host = os.Getenv("Host")
-	if Verbose {
+	if VERBOSE {
 		log("Host:%s", Host)
 	}
 
 	User = os.Getenv("User")
-	if Verbose {
+	if VERBOSE {
 		log("User:%s", User)
 	}
 
@@ -220,7 +220,7 @@ func init() {
 	if UserPassword != "" {
 		UserAuthMethod = ssh.Password(UserPassword)
 	}
-	if Verbose {
+	if VERBOSE {
 		log("UserPassword:%s", UserPassword)
 	}
 
@@ -253,7 +253,7 @@ func init() {
 		}
 		UserAuthMethod = ssh.PublicKeys(UserSigner)
 	}
-	if Verbose {
+	if VERBOSE {
 		log("UserKey:%s", UserKey)
 	}
 
@@ -269,7 +269,7 @@ func init() {
 		//ClientVersion: "hs", // NewClientConn: ssh: handshake failed: ssh: invalid packet length, packet too large
 		//HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			if Verbose {
+			if VERBOSE {
 				log("SSH server public key: type:%s hex:%s", key.Type(), hex.EncodeToString(key.Marshal()))
 			}
 			return nil
@@ -348,7 +348,7 @@ func connectssh() (err error) {
 // https://github.com/golang/go/issues/19338
 // https://pkg.go.dev/golang.org/x/crypto/ssh
 func keepalive(cl *ssh.Client, conn net.Conn, done <-chan bool) (err error) {
-	if Verbose {
+	if VERBOSE {
 		log("keepalive start")
 	}
 	t := time.NewTicker(SshKeepAliveInterval)
@@ -357,7 +357,7 @@ func keepalive(cl *ssh.Client, conn net.Conn, done <-chan bool) (err error) {
 		/*
 			err = conn.SetDeadline(time.Now().Add(2 * SshKeepAliveInterval))
 			if err != nil {
-				if Verbose {
+				if VERBOSE {
 					log("keepalive failed to set deadline: %v", err)
 				}
 				return fmt.Errorf("failed to set deadline: %w", err)
@@ -366,7 +366,7 @@ func keepalive(cl *ssh.Client, conn net.Conn, done <-chan bool) (err error) {
 		select {
 		case <-t.C:
 			_, _, err = cl.SendRequest("keepalive@github.com/shoce/hs", true, nil)
-			if Verbose {
+			if VERBOSE {
 				if err == nil {
 					log("keepalive request sent and confirmed")
 				} else {
@@ -377,7 +377,7 @@ func keepalive(cl *ssh.Client, conn net.Conn, done <-chan bool) (err error) {
 				return fmt.Errorf("failed to send keep alive: %w", err)
 			}
 		case <-done:
-			if Verbose {
+			if VERBOSE {
 				log("keepalive done")
 			}
 			return nil
@@ -458,7 +458,7 @@ func runssh(cmds string, cmd []string, stdin io.Reader) (status string, err erro
 		return "", fmt.Errorf("stderr pipe for session: %v", err)
 	}
 
-	if !Silent {
+	if !SILENT {
 		log(fmt.Sprintf("%s: ", cmds))
 	}
 
@@ -572,7 +572,7 @@ func runlocal(cmds string, cmd []string, stdin io.Reader) (status string, err er
 	copyerrnotify := make(chan error)
 	go copynotify(os.Stderr, stderrpipe, copyerrnotify)
 
-	if !Silent {
+	if !SILENT {
 		log(fmt.Sprintf("%s: ", cmds))
 	}
 
@@ -838,7 +838,7 @@ func hs() {
 		if cmd[len(cmd)-1] == "<" {
 			cmd = cmd[:len(cmd)-1]
 			cmds = strings.Join(cmd, " ")
-			if !Silent {
+			if !SILENT {
 				log("%s stdin: ", cmds)
 			}
 		}
@@ -878,7 +878,7 @@ func hs() {
 		if cmd[len(cmd)-1] == "<" {
 			cmd = cmd[:len(cmd)-1]
 			cmds = cmds[:len(cmds)-1]
-			if !Silent {
+			if !SILENT {
 				log("%s stdin: ", cmds)
 			}
 			stdinbb, err = ioutil.ReadAll(os.Stdin)
