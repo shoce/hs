@@ -22,7 +22,7 @@ GoFmt
 GoBuildNull
 GoBuild
 
-GoRun put a '<' <readme.text
+GoRun -- put a '<' <readme.text
 Kill GoRun
 
 Variables:
@@ -51,7 +51,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -292,16 +291,6 @@ func main() {
 	switch cmdname {
 	case "hs":
 		hs()
-	case "hlist":
-		hlist()
-	case "hhash":
-		hhash()
-	case "hget":
-		hget()
-	case "hput":
-		hput()
-	case "hlink":
-		hlink()
 	default:
 		log("unsupported command name `%s`", cmdname)
 		os.Exit(1)
@@ -661,109 +650,10 @@ func listpath(fpath string) error {
 	return nil
 }
 
-func hlist() {
-	flag.Parse()
-	args := flag.Args()
-	if len(args) == 0 {
-		args = []string{"."}
-	}
-	for _, p := range args {
-		if err := listpath(p); err != nil {
-			log("%v", err)
-			os.Exit(1)
-		}
-	}
-}
-
-func hlink() {
-	flag.Parse()
-	args := flag.Args()
-	if len(args) != 2 {
-		log("usage: hlink src dst")
-		os.Exit(1)
-	}
-	src, dst := args[0], args[1]
-	log("%s@%s@", src, dst)
-}
-
-func hhash() {
-	var err error
-	var limit int
-	flag.IntVar(&limit, "limit", 0, "max bytes to read from the file")
-	flag.Parse()
-	args := flag.Args()
-
-	if len(args) != 1 {
-		log("usage: hhash [-limit=123123] path")
-		os.Exit(1)
-	}
-	if limit < 0 {
-		log("hshash needs limit flag set to a positive integer")
-		os.Exit(1)
-	}
-	fpath := args[0]
-	if fpath, err = filepath.Abs(fpath); err != nil {
-		log("%v", err)
-		os.Exit(1)
-	} else {
-		fpath = filepath.Clean(fpath)
-	}
-	finfo, err := os.Stat(fpath)
-	if err != nil {
-		log("%v", err)
-		os.Exit(1)
-	}
-	if (finfo.Mode() & os.ModeSymlink) != 0 {
-		log("provided path is a symlink")
-		os.Exit(1)
-	}
-	if finfo.IsDir() {
-		log("provided path is a directory")
-		os.Exit(1)
-	}
-
-	s := fmt.Sprintf("%s", strings.ReplaceAll(fpath, "\t", "\\\t"))
-
-	s += fmt.Sprintf("\tsize:%s", seps(int(finfo.Size()), 3))
-
-	s += fmt.Sprintf("\tlimit:%s", seps(limit, 3))
-
-	f, err := os.Open(fpath)
-	if err != nil {
-		log("%v", err)
-		os.Exit(1)
-	}
-	defer f.Close()
-
-	var fr io.Reader
-	if limit > 0 {
-		fr = io.LimitReader(f, int64(limit))
-	} else {
-		fr = f
-	}
-	fmh, err := mh.SumStream(fr, mh.SHA2_256, -1)
-	if err != nil {
-		log("%v", err)
-		os.Exit(1)
-	}
-
-	c := cid.NewCidV1(cid.Raw, fmh)
-	s += fmt.Sprintf("\tcid:%s", c)
-
-	fmt.Println(s)
-}
-
-func hget() {
-}
-
-func hput() {
-}
-
 func hs() {
 	var err error
 
-	flag.Parse()
-	args := flag.Args()
+	args := os.Args[1:]
 
 	signalchan := make(chan os.Signal, 1)
 	signal.Notify(signalchan, os.Interrupt)
@@ -832,7 +722,11 @@ func hs() {
 	inreader := bufio.NewReaderSize(os.Stdin, InReaderBufferSize)
 
 	if len(args) > 0 {
-		cmd := args[:]
+		if args[0] != "--" {
+			log("the first argument should be `--`, example `hs -- id`")
+			os.Exit(1)
+		}
+		cmd := args[1:]
 		cmds := strings.Join(cmd, " ")
 
 		if cmd[len(cmd)-1] == "<" {
