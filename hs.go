@@ -721,11 +721,12 @@ func hs() {
 
 	inreader := bufio.NewReaderSize(os.Stdin, InReaderBufferSize)
 
-	if len(args) > 0 {
-		if args[0] != "--" {
-			log("the first argument should be `--`, example `hs -- id`")
-			os.Exit(1)
-		}
+	if len(args) > 0 && args[0] != "--" {
+		log("the first argument should be `--`, example `hs -- id`")
+		os.Exit(1)
+	}
+
+	if len(args) > 1 {
 		cmd := args[1:]
 		cmds := strings.Join(cmd, " ")
 
