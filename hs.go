@@ -14,7 +14,6 @@ Oct 28 21:37:28 ci sshd[3685911]: error: session_signal_req: session signalling 
 023/0827 VERBOSE
 023/0827 keepalive
 
-go mod init github.com/shoce/hs
 go get -a -u -v
 go mod tidy
 
@@ -115,67 +114,6 @@ var (
 
 	TzBiel *time.Location
 )
-
-func lognl() {
-	fmt.Fprintf(os.Stderr, "\n")
-}
-
-func underline(s string) string {
-	if os.Getenv("TERM") != "" {
-		return "\033[4m" + s + "\033[0m"
-	}
-	return s
-}
-
-func log(msg string, args ...interface{}) {
-	var t time.Time
-	var tsuffix string
-	var ts string
-	if LogBeatTime {
-		const Beat = time.Duration(24) * time.Hour / 1000
-		t = time.Now().In(TzBiel)
-		ty := t.Sub(time.Date(t.Year(), 1, 1, 0, 0, 0, 0, TzBiel))
-		td := t.Sub(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, TzBiel))
-		ts = fmt.Sprintf(
-			"%dy."+"%dd."+"%db.",
-			t.Year()%1000,
-			int(ty/(time.Duration(24)*time.Hour))+1,
-			int(td/Beat),
-		)
-	} else {
-		if LogUTCTime {
-			t = time.Now().UTC()
-			tsuffix = "z"
-		} else {
-			t = time.Now().Local()
-		}
-		ts = fmt.Sprintf(
-			"%03d."+"%02d%02d."+"%02d"+"%02d."+"%s",
-			t.Year()%1000, t.Month(), t.Day(),
-			t.Hour(), t.Minute(), tsuffix,
-		)
-	}
-	if len(args) == 0 {
-		fmt.Fprint(os.Stderr, ts+" "+msg+NL)
-	} else {
-		fmt.Fprintf(os.Stderr, ts+" "+msg+NL, args...)
-	}
-}
-
-func logstatus() {
-	lognl()
-	log(underline("Status=%s Hostname=%s Host=%s User=%s hs ; "), Status, Hostname, Host, User)
-}
-
-func seps(i int, e int) string {
-	ee := int(math.Pow(10, float64(e)))
-	if i < ee {
-		return fmt.Sprintf("%d", i%ee)
-	} else {
-		f := fmt.Sprintf("0%dd", e)
-		return fmt.Sprintf("%s.%"+f, seps(i/ee, e), i%ee)
-	}
-}
 
 func init() {
 	TzBiel = time.FixedZone("Biel", 60*60)
@@ -294,6 +232,67 @@ func main() {
 	default:
 		log("unsupported command name `%s`", cmdname)
 		os.Exit(1)
+	}
+}
+
+func lognl() {
+	fmt.Fprintf(os.Stderr, "\n")
+}
+
+func underline(s string) string {
+	if os.Getenv("TERM") != "" {
+		return "\033[4m" + s + "\033[0m"
+	}
+	return s
+}
+
+func log(msg string, args ...interface{}) {
+	var t time.Time
+	var tsuffix string
+	var ts string
+	if LogBeatTime {
+		const Beat = time.Duration(24) * time.Hour / 1000
+		t = time.Now().In(TzBiel)
+		ty := t.Sub(time.Date(t.Year(), 1, 1, 0, 0, 0, 0, TzBiel))
+		td := t.Sub(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, TzBiel))
+		ts = fmt.Sprintf(
+			"%dy."+"%dd."+"%db.",
+			t.Year()%1000,
+			int(ty/(time.Duration(24)*time.Hour))+1,
+			int(td/Beat),
+		)
+	} else {
+		if LogUTCTime {
+			t = time.Now().UTC()
+			tsuffix = "z"
+		} else {
+			t = time.Now().Local()
+		}
+		ts = fmt.Sprintf(
+			"%03d."+"%02d%02d."+"%02d%02d."+"%s",
+			t.Year()%1000, t.Month(), t.Day(),
+			t.Hour(), t.Minute(), tsuffix,
+		)
+	}
+	if len(args) == 0 {
+		fmt.Fprint(os.Stderr, ts+" "+msg+NL)
+	} else {
+		fmt.Fprintf(os.Stderr, ts+" "+msg+NL, args...)
+	}
+}
+
+func logstatus() {
+	lognl()
+	log(underline("Status=%s Hostname=%s Host=%s User=%s hs ; "), Status, Hostname, Host, User)
+}
+
+func seps(i int, e int) string {
+	ee := int(math.Pow(10, float64(e)))
+	if i < ee {
+		return fmt.Sprintf("%d", i%ee)
+	} else {
+		f := fmt.Sprintf("0%dd", e)
+		return fmt.Sprintf("%s.%"+f, seps(i/ee, e), i%ee)
 	}
 }
 
