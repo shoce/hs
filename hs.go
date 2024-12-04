@@ -14,7 +14,7 @@ Oct 28 21:37:28 ci sshd[3685911]: error: session_signal_req: session signalling 
 023/0827 VERBOSE
 023/0827 keepalive
 
-go get -a -u -v
+go get -u -v
 go mod tidy
 
 GoFmt
