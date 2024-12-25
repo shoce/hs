@@ -14,9 +14,7 @@ Oct 28 21:37:28 ci sshd[3685911]: error: session_signal_req: session signalling 
 023/0827 VERBOSE
 023/0827 keepalive
 
-go get -u -v
-go mod tidy
-
+GoGet
 GoFmt
 GoBuildNull
 GoBuild
@@ -112,12 +110,10 @@ var (
 
 	InterruptChan chan bool
 
-	TzBiel *time.Location
+	TzBiel *time.Location = time.FixedZone("Biel", 60*60)
 )
 
 func init() {
-	TzBiel = time.FixedZone("Biel", 60*60)
-
 	if len(os.Args) == 2 && os.Args[1] == "version" {
 		fmt.Printf("v%s\n", Version)
 		os.Exit(0)
@@ -247,31 +243,33 @@ func underline(s string) string {
 }
 
 func log(msg string, args ...interface{}) {
-	var t time.Time
+	var t time.Time = time.Now()
 	var tsuffix string
 	var ts string
 	if LogBeatTime {
-		const Beat = time.Duration(24) * time.Hour / 1000
-		t = time.Now().In(TzBiel)
+		const BEAT = time.Duration(24) * time.Hour / 1000
+		t = t.In(TzBiel)
 		ty := t.Sub(time.Date(t.Year(), 1, 1, 0, 0, 0, 0, TzBiel))
 		td := t.Sub(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, TzBiel))
 		ts = fmt.Sprintf(
-			"%dy."+"%dd."+"%db.",
+			"%d:"+"%d:"+"%d",
 			t.Year()%1000,
 			int(ty/(time.Duration(24)*time.Hour))+1,
-			int(td/Beat),
+			int(td/BEAT),
 		)
 	} else {
 		if LogUTCTime {
-			t = time.Now().UTC()
+			t = t.UTC()
 			tsuffix = "z"
 		} else {
-			t = time.Now().Local()
+			t = t.Local()
 		}
 		ts = fmt.Sprintf(
-			"%03d."+"%02d%02d."+"%02d%02d."+"%s",
-			t.Year()%1000, t.Month(), t.Day(),
-			t.Hour(), t.Minute(), tsuffix,
+			"%03d:"+"%02d%02d:"+"%02d%02d"+"%s",
+			t.Year()%1000,
+			t.Month(), t.Day(),
+			t.Hour(), t.Minute(),
+			tsuffix,
 		)
 	}
 	if len(args) == 0 {
