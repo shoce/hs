@@ -13,6 +13,7 @@ Oct 28 21:37:28 ci sshd[3685911]: error: session_signal_req: session signalling 
 021/1117 SILENT
 023/0827 VERBOSE
 023/0827 keepalive
+025/0108 sighup
 
 GoGet
 GoFmt
@@ -58,9 +59,9 @@ import (
 	"os/exec"
 	"os/signal"
 	"os/user"
-	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	cid "github.com/ipfs/go-cid"
@@ -115,7 +116,7 @@ var (
 
 func init() {
 	if len(os.Args) == 2 && os.Args[1] == "version" {
-		fmt.Printf("v%s\n", Version)
+		fmt.Printf("%s\n", Version)
 		os.Exit(0)
 	}
 
@@ -220,14 +221,156 @@ func init() {
 }
 
 func main() {
-	cmdname := path.Base(os.Args[0])
+	var err error
 
-	switch cmdname {
-	case "hs":
-		hs()
-	default:
-		log("unsupported command name `%s`", cmdname)
+	sigintchan := make(chan os.Signal, 1)
+	signal.Notify(sigintchan, syscall.SIGINT)
+	go func() {
+		for {
+			s := <-sigintchan
+			switch s {
+			case syscall.SIGINT:
+				lognl()
+				log("interrupt signal")
+				if InterruptChan != nil {
+					InterruptChan <- true
+				}
+			}
+		}
+	}()
+
+	sighupchan := make(chan os.Signal, 1)
+	signal.Notify(sighupchan, syscall.SIGHUP)
+	go func() {
+		for {
+			s := <-sighupchan
+			switch s {
+			case syscall.SIGHUP:
+				lognl()
+				log("hangup signal")
+				os.Exit(2)
+			}
+		}
+	}()
+
+	args := os.Args[1:]
+
+	if Host == "" {
+
+		Hostname, err = os.Hostname()
+		if err != nil {
+			log("Hostname: %v", err)
+			os.Exit(1)
+		}
+		Hostname = strings.TrimSuffix(Hostname, ".local")
+		//log("Hostname:%s", Hostname)
+
+		u, err := user.Current()
+		if err != nil {
+			log("user.Current: %v", err)
+		}
+		User = u.Username
+
+	} else {
+
+		if len(ProxyChain) > 0 {
+			for _, p := range ProxyChain {
+				proxyurl, err := url.Parse(p)
+				if err != nil {
+					log("Proxy url `%s`: %v", p, err)
+					os.Exit(1)
+				}
+				pd, err := proxy.FromURL(proxyurl, ProxyDialer)
+				if err != nil {
+					log("Proxy from url: %v", err)
+					os.Exit(1)
+				}
+				ProxyDialer = pd
+			}
+		}
+
+		if len(strings.Split(Host, ":")) < 2 {
+			Host = fmt.Sprintf("%s:22", Host)
+			//log("Host:%s", Host)
+		}
+
+		err = connectssh()
+		if err != nil {
+			//log("connect ssh: %v", err)
+		}
+		if SshClient != nil {
+			defer SshClient.Close()
+		}
+	}
+
+	inreader := bufio.NewReaderSize(os.Stdin, InReaderBufferSize)
+
+	if len(args) > 0 && args[0] != "--" {
+		log("the first argument should be `--`, example `hs -- id`")
 		os.Exit(1)
+	}
+
+	if len(args) > 1 {
+		cmd := args[1:]
+		cmds := strings.Join(cmd, " ")
+
+		if cmd[len(cmd)-1] == "<" {
+			cmd = cmd[:len(cmd)-1]
+			cmds = strings.Join(cmd, " ")
+			if !SILENT {
+				log("%s stdin: ", cmds)
+			}
+		}
+
+		Status, err = run(cmds, cmd, inreader)
+		if err != nil {
+			os.Exit(1)
+		}
+		if Status != "" {
+			log("%s status: %s", cmds, Status)
+		}
+		os.Exit(0)
+	}
+
+	var stdinbb []byte
+	for {
+		logstatus()
+
+		cmds, err := inreader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				log("EOF")
+				break
+			}
+			log("ReadString: %v", err)
+			continue
+		}
+
+		cmds = strings.TrimSpace(cmds)
+		if cmds == "" {
+			continue
+		}
+
+		cmd := strings.Split(cmds, " ")
+
+		stdinbb = nil
+		if cmd[len(cmd)-1] == "<" {
+			cmd = cmd[:len(cmd)-1]
+			cmds = cmds[:len(cmds)-1]
+			if !SILENT {
+				log("%s stdin: ", cmds)
+			}
+			stdinbb, err = ioutil.ReadAll(os.Stdin)
+			if err != nil {
+				log("read stdin: %v", err)
+				continue
+			}
+		}
+
+		Status, err = run(cmds, cmd, bytes.NewBuffer(stdinbb))
+		if err != nil {
+			continue
+		}
 	}
 }
 
@@ -645,144 +788,4 @@ func listpath(fpath string) error {
 		}
 	}
 	return nil
-}
-
-func hs() {
-	var err error
-
-	args := os.Args[1:]
-
-	signalchan := make(chan os.Signal, 1)
-	signal.Notify(signalchan, os.Interrupt)
-	go func() {
-		for {
-			s := <-signalchan
-			switch s {
-			case os.Interrupt:
-				lognl()
-				log("interrupt signal")
-				if InterruptChan != nil {
-					InterruptChan <- true
-				}
-			}
-		}
-	}()
-
-	if Host == "" {
-
-		Hostname, err = os.Hostname()
-		if err != nil {
-			log("Hostname: %v", err)
-			os.Exit(1)
-		}
-		Hostname = strings.TrimSuffix(Hostname, ".local")
-		//log("Hostname:%s", Hostname)
-
-		u, err := user.Current()
-		if err != nil {
-			log("user.Current: %v", err)
-		}
-		User = u.Username
-
-	} else {
-
-		if len(ProxyChain) > 0 {
-			for _, p := range ProxyChain {
-				proxyurl, err := url.Parse(p)
-				if err != nil {
-					log("Proxy url `%s`: %v", p, err)
-					os.Exit(1)
-				}
-				pd, err := proxy.FromURL(proxyurl, ProxyDialer)
-				if err != nil {
-					log("Proxy from url: %v", err)
-					os.Exit(1)
-				}
-				ProxyDialer = pd
-			}
-		}
-
-		if len(strings.Split(Host, ":")) < 2 {
-			Host = fmt.Sprintf("%s:22", Host)
-			//log("Host:%s", Host)
-		}
-
-		err = connectssh()
-		if err != nil {
-			//log("connect ssh: %v", err)
-		}
-		if SshClient != nil {
-			defer SshClient.Close()
-		}
-	}
-
-	inreader := bufio.NewReaderSize(os.Stdin, InReaderBufferSize)
-
-	if len(args) > 0 && args[0] != "--" {
-		log("the first argument should be `--`, example `hs -- id`")
-		os.Exit(1)
-	}
-
-	if len(args) > 1 {
-		cmd := args[1:]
-		cmds := strings.Join(cmd, " ")
-
-		if cmd[len(cmd)-1] == "<" {
-			cmd = cmd[:len(cmd)-1]
-			cmds = strings.Join(cmd, " ")
-			if !SILENT {
-				log("%s stdin: ", cmds)
-			}
-		}
-
-		Status, err = run(cmds, cmd, inreader)
-		if err != nil {
-			os.Exit(1)
-		}
-		if Status != "" {
-			log("%s status: %s", cmds, Status)
-		}
-		os.Exit(0)
-	}
-
-	var stdinbb []byte
-	for {
-		logstatus()
-
-		cmds, err := inreader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				log("EOF")
-				break
-			}
-			log("ReadString: %v", err)
-			continue
-		}
-
-		cmds = strings.TrimSpace(cmds)
-		if cmds == "" {
-			continue
-		}
-
-		cmd := strings.Split(cmds, " ")
-
-		stdinbb = nil
-		if cmd[len(cmd)-1] == "<" {
-			cmd = cmd[:len(cmd)-1]
-			cmds = cmds[:len(cmds)-1]
-			if !SILENT {
-				log("%s stdin: ", cmds)
-			}
-			stdinbb, err = ioutil.ReadAll(os.Stdin)
-			if err != nil {
-				log("read stdin: %v", err)
-				continue
-			}
-		}
-
-		Status, err = run(cmds, cmd, bytes.NewBuffer(stdinbb))
-		if err != nil {
-			continue
-		}
-	}
 }
