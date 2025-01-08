@@ -2,6 +2,7 @@
 name: release
 permissions:
   contents: write
+
 on:
   push:
     branches:
@@ -15,8 +16,8 @@ jobs:
 
       - name: version
         run: |
-          echo "BUILD_OS=ubuntu-24.04" >> $GITHUB_ENV
-          echo "VERSION=$( date '+%y.%m%d.%H%M' )-$BUILD_OS" >> $GITHUB_ENV
+          BUILD_OS=ubuntu-24.04
+          VERSION=$( date '+%y.%m%d.%H%M' )-$BUILD_OS
 
       # https://github.com/actions/checkout/
       - uses: actions/checkout@v4
@@ -62,8 +63,8 @@ jobs:
 
       - name: version
         run: |
-          echo "BUILD_OS=alpine-3.20" >> $GITHUB_ENV
-          echo "VERSION=$( date '+%y.%m%d.%H%M' )-$BUILD_OS" >> $GITHUB_ENV
+          BUILD_OS=alpine-3.20
+          VERSION=$( date '+%y.%m%d.%H%M' )-$BUILD_OS
 
       - uses: actions/checkout@v4
 
